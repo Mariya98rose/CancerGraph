@@ -1,0 +1,17 @@
+# Data (large, and must not be redistributed): keep on Google Drive only
+data/
+*.tsv
+*.tsv.gz
+*.gz
+*.zip
+
+# Secrets: never commit
+.env
+*token*
+*.key
+
+# Python / Colab clutter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
