@@ -1,0 +1,12 @@
+gene,class,RF_SHAP_rank,GNN_rank
+ESR1,LumA,1,194
+ESR1,LumB,1,221
+PGR,LumA,58,11
+PGR,LumB,237,476
+GATA3,LumA,2,221
+GATA3,LumB,6,413
+FOXA1,LumA,25,181
+FOXA1,LumB,23,228
+ERBB2,-,not in top-1000 genes,-
+KRT5,Basal,155,968
+KRT14,Basal,220,434
