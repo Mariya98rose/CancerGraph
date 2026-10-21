@@ -388,3 +388,162 @@ Tip: save processed data to Google Drive so it is not re-downloaded every sessio
 - STRING database, for protein-protein association data
 - PyTorch Geometric, for graph neural network tools
 - SHAP, for model explanation
+
+---
+
+# Project report: CancerGraph (Stage 1)
+
+**Author:** Mariya Rose Sojan, Mar Athanasius College of Engineering (Deep Learning Lab micro project)
+
+> **Research use only.** This is a student research project. Outputs are not clinical diagnoses
+> and must not be used for medical decisions.
+
+## 1. Question
+
+Does a heterogeneous graph neural network (sample nodes + gene nodes, with gene-gene interactions
+from STRING) classify breast cancer PAM50 subtypes better than standard machine-learning baselines,
+and can it point to **candidate** biomarker genes? The project does not assume the GNN wins;
+"no improvement" is a valid result.
+
+## 2. Data
+
+- **Source:** UCSC Xena, cohort *TCGA Breast Cancer (BRCA)*, TCGA Hub.
+- **Expression:** `TCGA.BRCA.sampleMap/HiSeqV2` (version 2017-10-13), gene-level RNA-seq,
+  log2(norm_count+1), 20,530 genes x 1,218 samples.
+- **Clinical:** `TCGA.BRCA.sampleMap/BRCA_clinicalMatrix`, 1,247 samples.
+- **Labels:** column `PAM50Call_RNAseq` (PAM50 call provided in the Xena clinical matrix;
+  the Xena page does not document exactly how it was computed). Classes: Basal, Her2, LumA, LumB, Normal.
+- **Cleaning:** samples present in both files, primary tumours only (barcode type code 01),
+  labelled samples only, one sample per patient (first 12 barcode characters).
+- **Final dataset: 844 samples** - LumA 421, LumB 192, Basal 141, Her2 67, Normal 23.
+- **Interaction network:** STRING v12.5, human (9606), combined score >= 700, duplicates and self-loops removed.
+- Raw data are not stored in this repo. Download them from Xena and STRING.
+
+## 3. Methods
+
+**Split and leakage control.** Stratified 70/15/15 train/val/test split (seed 42), saved in
+`results/split_seed42.csv` and shared by all models (train 590 / val 127 / test 127 samples).
+The split is done **first**. The top 1,000 most variable genes and the scaler are fitted on
+**training samples only**. Labels are never input features. Only training labels enter the GNN loss.
+
+**Baselines** (same 1,000 scaled genes): Logistic Regression, Random Forest (500 trees),
+MLP (one hidden layer of 128 units).
+
+**Graph.** Node types: `sample` (844) and `gene` (1,000). Edge types:
+`sample -> gene` "expresses" (each sample linked to its 50 genes with the highest *scaled*
+expression, 42,200 edges), its reverse "rev_expresses", and `gene <-> gene` "interacts"
+(1,129 unique STRING pairs = 2,258 directed edges; 576 of the 1,000 genes have at least one STRING edge).
+Setting: transductive (all samples in the graph, only training labels in the loss).
+
+**GNN** (PyTorch Geometric, 182,085 parameters). Linear projection for sample features, learned
+`nn.Embedding` for genes (hidden size 64), 2 layers of `HeteroConv` with one `SAGEConv` per edge type
+(sum across edge types) + ReLU + dropout 0.5, then an MLP classifier on sample nodes.
+Cross-entropy loss, Adam (lr 1e-3, weight decay 5e-4), best checkpoint kept.
+
+- **v1:** unweighted loss, early stopping on validation loss.
+- **v2:** class-weighted loss, early stopping on validation macro-F1. v2 was designed **after** seeing
+  v1's results (v1 almost missed the rare classes), so it is reported as a follow-up and v1 is kept.
+
+**Explainability.** SHAP (TreeExplainer) for Random Forest; gradient x input for GNN v2, both computed
+on test samples grouped by true subtype.
+
+## 4. Results (test set, 127 samples)
+
+"macro_f1_95%_range" is a bootstrap range (1,000 resamples of the test set); it shows how noisy a
+127-sample test set is. It is not a formal significance test.
+
+| model | accuracy | macro_f1 | balanced_accuracy | macro_f1_95%_range |
+|---|---|---|---|---|
+| LogisticRegression | 0.874 | 0.824 | 0.789 | 0.70 - 0.94 |
+| RandomForest | 0.819 | 0.656 | 0.642 | 0.59 - 0.81 |
+| MLP | 0.819 | 0.733 | 0.781 | 0.61 - 0.83 |
+| HeteroGNN_v1 | 0.795 | 0.537 | 0.554 | 0.47 - 0.67 |
+| HeteroGNN_v2_classweighted | 0.764 | 0.687 | 0.732 | 0.60 - 0.77 |
+
+![Model comparison](results/model_comparison.png)
+
+Confusion matrices and per-class tables are in `results/` (`cm_*.png`, `per_class_*.csv`).
+
+**Findings**
+
+- Logistic Regression had the highest accuracy, macro-F1 and balanced accuracy.
+  **The GNN did not improve over the baselines in this setup.**
+- Class weighting raised GNN macro-F1 from 0.537 (v1) to 0.687 (v2) and recovered Her2
+  (recall 0.10 -> 0.90), at some cost in LumA recall and accuracy. It remained below Logistic Regression.
+- The macro-F1 ranges of several models overlap, so many of the differences between models are
+  within the noise of this test set. Only GNN v1 looks clearly weaker.
+- The `Normal` class has just 23 samples (3 in the test set), so its precision and recall are unreliable.
+- A plausible, **untested** explanation: PAM50 labels are computed from the expression of 50 genes that are
+  in the input, so simple models already capture most of the signal. We did not run ablations to test this.
+
+## 5. Explainability: candidate genes
+
+Top genes per subtype (importance computed on test samples; method details above):
+
+| Subtype | RF SHAP top 10 | GNN v2 top 10 |
+|---|---|---|
+| Basal | ESR1, CT62, GATA3, MLPH, FOXA1, C6orf97, LOC145837, CA12, SPDEF, DEGS2 | AR, MLPH, GDF5, SPDEF, ROPN1, SYTL5, C1orf168, FBN3, LRRC26, CXCL5 |
+| Her2 | ESR1, C6orf97, GATA3, AGR3, GREB1, MLPH, FOXA1, NXNL2, PSAT1, CT62 | PADI3, C2orf54, NKX2-2, PAX7, B4GALNT2, IVL, TMEM45B, PPP4R4, CASP14, POF1B |
+| LumA | ESR1, GATA3, C6orf97, CDCA7, IRX1, AGR3, SMC1B, PSAT1, CT62, C2orf40 | IGFALS, SCN7A, LOC389033, SLC26A3, CYP21A2, TFF3, SUSD3, NXNL2, DEGS2, PGLYRP2 |
+| LumB | ESR1, IRX1, C6orf97, KRT5, C2orf40, GATA3, MIA, SOX10, SFRP1, KRT14 | SLPI, KRT16, GPR110, FOXI1, KRT23, KRT17, TMEM145, FERMT1, MAPK4, KRT6B |
+| Normal | GATA3, ESR1, MIA, SOX10, ZMYND10, IRX1, GABRP, ROPN1B, VGLL1, FOXA1 | MT1A, DARC, FAIM2, ACTG2, LOC100130148, GRIA4, COL17A1, C2orf40, WIF1, FAM3D |
+
+Check against known subtype markers (rank among the 1,000 genes; 1 = most important for that class):
+
+| gene | class | RF_SHAP_rank | GNN_rank |
+|---|---|---|---|
+| ESR1 | LumA | 1 | 194 |
+| ESR1 | LumB | 1 | 221 |
+| PGR | LumA | 58 | 11 |
+| PGR | LumB | 237 | 476 |
+| GATA3 | LumA | 2 | 221 |
+| GATA3 | LumB | 6 | 413 |
+| FOXA1 | LumA | 25 | 181 |
+| FOXA1 | LumB | 23 | 228 |
+| ERBB2 | - | not in top-1000 genes | - |
+| KRT5 | Basal | 155 | 968 |
+| KRT14 | Basal | 220 | 434 |
+
+**How to read these tables**
+
+- Importance describes what the **model** relies on. It is **not causal evidence**.
+- Several known markers (e.g. ESR1, ERBB2, KRT5, FOXA1) are part of the PAM50 gene set that defines the labels, so
+  their presence is a **sanity check, not a discovery**.
+- Genes that are not known markers are only **candidate biomarkers** and would need validation
+  in independent data and experiments. Nothing here is a proven biomarker.
+- The two methods (SHAP and gradients) measure different things and their scores are not on the same scale.
+- Rankings come from one seed and one split; their stability has not been tested.
+- `Normal` rankings rest on 3 test samples and should not be interpreted.
+
+## 6. Limitations
+
+- Single split and single seed; small test set (127 samples), tiny `Normal` class.
+- PAM50 labels are derived from expression, which limits what a model can add and makes label leakage-like
+  effects possible. We did not remove the PAM50 genes (planned ablation).
+- STRING edges are associations (functional evidence), not necessarily physical interactions.
+  424 of the 1,000 genes had no STRING edge at score >= 700; we did not investigate why.
+- The "expresses" edges were built from scaled expression, a design choice. Other choices (raw expression,
+  different k) were not compared.
+- Baselines were not tuned like the GNN follow-up, so the comparison is not perfectly balanced.
+- Transductive GNN: it predicts samples already in the graph, not new uploads.
+
+## 7. Reproduce
+
+1. Open `CancerGraph.ipynb` in Google Colab (CPU is enough) and mount Google Drive.
+2. Download the Xena and STRING files named in section 2 into `data/raw/` on Drive.
+3. Run the notebook top to bottom (seed 42). Dependencies: see `requirements.txt`.
+4. Outputs are written to `results/`.
+
+## 8. Repository contents
+
+- `CancerGraph.ipynb` - full pipeline
+- `results/` - metrics, confusion matrices, gene rankings, test predictions, split file, small GNN checkpoints
+- `DATA_NOTES.md` - data provenance notes
+- `requirements.txt`, `.gitignore`
+
+## 9. Planned work
+
+- Stage 2: homogeneous GNN baseline, multiple seeds (mean +/- std), ranking stability.
+- Stage 3: protein nodes, GAT, GNNExplainer, hyperparameter tuning.
+- Stage 4: external validation (METABRIC), PAM50-gene ablation, tests, `src/` refactor.
+- Streamlit dashboard (not implemented yet).
