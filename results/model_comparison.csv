@@ -1,0 +1,6 @@
+model,accuracy,macro_f1,balanced_accuracy,macro_f1_95%_range
+LogisticRegression,0.874,0.824,0.789,0.70 - 0.94
+RandomForest,0.819,0.656,0.642,0.59 - 0.81
+MLP,0.819,0.733,0.781,0.61 - 0.83
+HeteroGNN_v1,0.795,0.537,0.554,0.47 - 0.67
+HeteroGNN_v2_classweighted,0.764,0.687,0.732,0.60 - 0.77
