@@ -1,0 +1,7 @@
+model,split,accuracy,macro_f1,balanced_accuracy
+LogisticRegression,val,0.843,0.744,0.734
+LogisticRegression,test,0.874,0.824,0.789
+RandomForest,val,0.866,0.683,0.68
+RandomForest,test,0.819,0.656,0.642
+MLP,val,0.803,0.671,0.667
+MLP,test,0.819,0.733,0.781
