@@ -1,0 +1,6 @@
+label,train,val,test
+Basal,99,21,21
+Her2,47,10,10
+LumA,294,63,64
+LumB,134,29,29
+Normal,16,4,3
