@@ -12,3 +12,5 @@
 - Split: stratified 70/15/15, seed 42 (results/split_seed42.csv). Same split for all models.
 - Caveat: the Normal class is very small (23 primary tumours), so its metrics are unreliable.
   Raw data are not stored in this repo; download them from Xena.
+
+- STRING: v12.5, human (9606), protein.links + protein.info, combined score >= 700.
