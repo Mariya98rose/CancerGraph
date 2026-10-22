@@ -1,0 +1,8 @@
+,value
+sample_nodes,844
+gene_nodes,1000
+expresses_edges,42200
+interacts_edges_directed,2258
+interacts_pairs_undirected,1129
+genes_without_string_edge,424
+train/val/test,"(590, 127, 127)"
