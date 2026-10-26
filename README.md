@@ -531,7 +531,7 @@ Check against known subtype markers (rank among the 1,000 genes; 1 = most import
 
 1. Open `CancerGraph.ipynb` in Google Colab (CPU is enough) and mount Google Drive.
 2. Download the Xena and STRING files named in section 2 into `data/raw/` on Drive.
-3. Run the notebook top to bottom (seed 42). Dependencies: see `requirements.txt`.
+3. Run the notebook top to bottom (seed 42). Dependencies: see `requirements-notebook.txt`.
 4. Outputs are written to `results/`.
 
 ## 8. Repository contents
@@ -539,11 +539,11 @@ Check against known subtype markers (rank among the 1,000 genes; 1 = most import
 - `CancerGraph.ipynb` - full pipeline
 - `results/` - metrics, confusion matrices, gene rankings, test predictions, split file, small GNN checkpoints
 - `DATA_NOTES.md` - data provenance notes
-- `requirements.txt`, `.gitignore`
+- `requirements-notebook.txt` (notebook), `dashboard/` (Streamlit app with its own `requirements.txt`), `.gitignore`
 
 ## 9. Planned work
 
 - Stage 2: homogeneous GNN baseline, multiple seeds (mean +/- std), ranking stability.
 - Stage 3: protein nodes, GAT, GNNExplainer, hyperparameter tuning.
 - Stage 4: external validation (METABRIC), PAM50-gene ablation, tests, `src/` refactor.
-- Streamlit dashboard (not implemented yet).
+- Streamlit dashboard: implemented in `dashboard/` (shows existing test samples only).
