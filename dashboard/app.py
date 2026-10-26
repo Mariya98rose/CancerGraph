@@ -36,11 +36,69 @@ rank = load_csv("gene_rankings.csv")
 markers = load_csv("known_marker_check.csv")
 edges = load_csv("string_edges_top1000.csv")
 
-tabs = st.tabs(["Model comparison", "Confusion matrix", "Predictions per sample",
+tabs = st.tabs(["Candidate biomarkers", "Model comparison", "Confusion matrix", "Predictions per sample",
                 "Top genes", "Gene network", "About and limitations"])
 
-# ---------------- Tab 1: model comparison ----------------
+# ---------------- Tab 0: candidate biomarkers ----------------
+KNOWN = {"ESR1": "luminal", "PGR": "luminal", "GATA3": "luminal", "FOXA1": "luminal",
+         "ERBB2": "HER2", "KRT5": "basal", "KRT14": "basal"}
 with tabs[0]:
+    st.subheader("Candidate biomarker genes per subtype")
+    st.warning("These are CANDIDATE biomarkers: genes that the models relied on. They are not validated "
+               "biomarkers and do not show causation. Validation would need independent data and experiments.")
+    if rank is None:
+        st.error("results/gene_rankings.csv not found.")
+    else:
+        c1, c2 = st.columns(2)
+        subtype = c1.selectbox("Subtype", CLASSES, key="bio_subtype")
+        n = c2.slider("Top N genes per method", 5, 20, 10, key="bio_n")
+        if subtype == "Normal":
+            st.info("Only 3 Normal samples were in the test set, so these rankings are not interpretable.")
+
+        sub = rank[rank["class"] == subtype]
+        rf = sub[sub["method"] == "RF_SHAP"].set_index("gene")["rank"]
+        gn = sub[sub["method"] == "GNN_gradxinput"].set_index("gene")["rank"]
+        gdir = {}
+        if "direction" in sub.columns:
+            gdir = sub[sub["method"] == "GNN_gradxinput"].set_index("gene")["direction"].to_dict()
+        rf_top = set(rf[rf <= n].index)
+        gn_top = set(gn[gn <= n].index)
+
+        rows = []
+        for g in sorted(rf_top | gn_top):
+            in_rf, in_gn = g in rf_top, g in gn_top
+            rr = int(rf[g]) if g in rf.index else None
+            gr = int(gn[g]) if g in gn.index else None
+            rows.append({
+                "gene": g,
+                "evidence": "Both methods" if (in_rf and in_gn) else ("RF SHAP only" if in_rf else "GNN only"),
+                "RF rank": str(rr) if rr is not None else ">20",
+                "GNN rank": str(gr) if gr is not None else ">20",
+                "GNN direction": str(gdir.get(g, "")),
+                "known marker": f"Known {KNOWN[g]} marker" if g in KNOWN else "",
+                "_best": min(x for x in (rr, gr) if x is not None),
+            })
+        df = pd.DataFrame(rows)
+        df["_o"] = df["evidence"].map({"Both methods": 0, "RF SHAP only": 1, "GNN only": 2})
+        df = df.sort_values(["_o", "_best"]).drop(columns=["_o", "_best"])
+
+        m1, m2 = st.columns(2)
+        m1.metric("Genes found by both methods", int((df["evidence"] == "Both methods").sum()))
+        m2.metric("Genes listed", len(df))
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.caption("Evidence: 'Both methods' = Random Forest SHAP and GNN gradient both rank the gene in their top N. "
+                   "'GNN only' is the weakest evidence: in this run the GNN rankings agreed poorly with the Random Forest "
+                   "and with known markers. Importance values are absolute for the Random Forest, so its direction is unknown. "
+                   "Several known markers (e.g. ESR1, FOXA1) are part of the PAM50 gene set that defines the labels, "
+                   "so finding them is a sanity check, not a discovery.")
+
+        if markers is not None:
+            st.markdown("**Known-marker check** (rank among 1,000 genes; 1 = most important)")
+            st.dataframe(markers, use_container_width=True, hide_index=True)
+            st.caption("ERBB2 was not among the 1,000 most variable genes, so the models never saw it.")
+
+# ---------------- Tab 1: model comparison ----------------
+with tabs[1]:
     st.subheader("Model comparison (test set, 127 samples)")
     if comparison is None:
         st.error("results/model_comparison.csv not found.")
@@ -53,7 +111,7 @@ with tabs[0]:
                 "from the small test set. The GNN is not assumed to win.")
 
 # ---------------- Tab 2: confusion matrix ----------------
-with tabs[1]:
+with tabs[2]:
     st.subheader("Confusion matrix and per-class results (test set)")
     model = st.selectbox("Model", MODELS, key="cm_model")
     left, right = st.columns(2)
@@ -68,7 +126,7 @@ with tabs[1]:
     st.caption("The Normal class has only 3 test samples, so its precision and recall are unreliable.")
 
 # ---------------- Tab 3: predictions per sample ----------------
-with tabs[2]:
+with tabs[3]:
     st.subheader("Predicted subtype for each test sample")
     st.caption("The GNN is transductive: it predicts samples that are already in the graph. "
                "New samples cannot be uploaded.")
@@ -92,7 +150,7 @@ with tabs[2]:
         st.dataframe(view, use_container_width=True, hide_index=True)
 
 # ---------------- Tab 4: top genes ----------------
-with tabs[3]:
+with tabs[4]:
     st.subheader("Top genes per subtype (candidate biomarkers)")
     if rank is None:
         st.error("results/gene_rankings.csv not found.")
@@ -117,7 +175,7 @@ with tabs[3]:
                    "and one split.")
 
 # ---------------- Tab 5: gene network ----------------
-with tabs[4]:
+with tabs[5]:
     st.subheader("STRING gene network around the top genes")
     if rank is None or edges is None:
         st.error("results/gene_rankings.csv or results/string_edges_top1000.csv not found.")
@@ -158,7 +216,7 @@ with tabs[4]:
                    "functional associations (combined score >= 700), not necessarily physical interactions.")
 
 # ---------------- Tab 6: about ----------------
-with tabs[5]:
+with tabs[6]:
     st.subheader("About and limitations")
     st.markdown("""
 **Data:** TCGA-BRCA from UCSC Xena (RNA-seq, 844 primary tumours, PAM50 labels from the Xena clinical matrix).
